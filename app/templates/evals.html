@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Evaluation Results</h1>
+{% if project_id %}
+<p>Project ID: {{ project_id }}</p>
+{% endif %}
+<table border="1">
+  <thead>
+    <tr>
+      <th>Id</th>
+      <th>Dataset Id</th>
+      <th>Run Id</th>
+      <th>Metric</th>
+      <th>Score</th>
+      <th>Label</th>
+      <th>Judge Model</th>
+      <th>Created At</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for result in results %}
+    <tr>
+      <td>{{ result.id }}</td>
+      <td>{{ result.dataset_id }}</td>
+      <td>{{ result.eval_run_id }}</td>
+      <td>{{ result.metric_name }}</td>
+      <td>{{ "%.3f"|format(result.score) }}</td>
+      <td>{{ result.label }}</td>
+      <td>{{ result.judge_model }}</td>
+      <td>{{ result.created_at }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

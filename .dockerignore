@@ -1,0 +1,14 @@
+*
+!Dockerfile
+!docker-compose.yml
+!requirements.txt
+!.dockerignore
+!.env.example
+!app/
+!app/**
+.env
+ai_eval.db
+ai-eval-ui/node_modules/
+ai-eval-ui/dist/
+**/__pycache__/
+**/*.pyc

@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Datasets</h1>
+<section style="margin-bottom: 16px;">
+  <h2>Add Dataset</h2>
+  <form id="create-dataset-form">
+    <label>
+      Name
+      <input type="text" name="name" placeholder="Customer support traces" required />
+    </label>
+    <label>
+      Task Type
+      <input type="text" name="task_type" placeholder="chat" value="chat" required />
+    </label>
+    <button type="submit">Create Dataset</button>
+  </form>
+</section>
+<section style="margin-bottom: 16px;">
+  <h2>Dataset Sample API Example</h2>
+  <p style="margin-top: 0;">
+    `POST /dataset/{dataset_id}/samples` now accepts either structured fields or a full JSON payload in <code>data</code>.
+  </p>
+  <pre style="background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto;">{
+  "data": {
+    "query": "Where is my order?",
+    "answer": "Your order was shipped yesterday.",
+    "sources": [
+      "Order shipped yesterday"
+    ],
+    "metadata": {
+      "priority": "high",
+      "channel": "support"
+    }
+  }
+}</pre>
+  <p style="margin-bottom: 0;">
+    You can still send the legacy shape too:
+  </p>
+  <pre style="background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto;">{
+  "input": "Where is my order?",
+  "context": ["Order shipped yesterday"],
+  "expected_output": "Your order was shipped yesterday."
+}</pre>
+</section>
+<table border="1">
+  <thead>
+    <tr>
+      <th>Id</th>
+      <th>Name</th>
+      <th>Task Type</th>
+      <th>Created At</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for dataset in datasets %}
+    <tr>
+      <td>{{ dataset.id }}</td>
+      <td>{{ dataset.name }}</td>
+      <td>{{ dataset.task_type }}</td>
+      <td>{{ dataset.created_at }}</td>
+      <td>
+        <button type="button" onclick="runEvaluation('{{ dataset.id }}')">Run Evaluation</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+  const createDatasetForm = document.getElementById("create-dataset-form");
+
+  createDatasetForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const formData = new FormData(createDatasetForm);
+    const name = String(formData.get("name") || "").trim();
+    const taskType = String(formData.get("task_type") || "").trim();
+
+    if (!name || !taskType) {
+      alert("Please provide both a dataset name and task type.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/dataset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name,
+          task_type: taskType
+        })
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.error || result?.detail || "Failed to create dataset.");
+      }
+
+      createDatasetForm.reset();
+      createDatasetForm.task_type.value = "chat";
+      window.location.reload();
+    } catch (error) {
+      alert(`Failed to create dataset: ${error.message}`);
+    }
+  });
+
+  async function runEvaluation(datasetId) {
+    const metricsInput = prompt(
+      "Enter metrics (comma-separated)",
+      "faithfulness,relevance,completeness,hallucination"
+    );
+    if (metricsInput === null) {
+      return;
+    }
+
+    const providerInput = prompt("Enter provider", "openai");
+    if (providerInput === null) {
+      return;
+    }
+
+    const modelInput = prompt("Enter model", "gpt-4o-mini");
+    if (modelInput === null) {
+      return;
+    }
+
+    const metrics = metricsInput
+      .split(",")
+      .map((metric) => metric.trim())
+      .filter(Boolean);
+
+    if (metrics.length === 0) {
+      alert("Please enter at least one metric.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/eval/${datasetId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          metrics,
+          provider: providerInput.trim(),
+          model: modelInput.trim()
+        })
+      });
+
+      const result = await response.json();
+      const prefix = result?.queued
+        ? "Evaluation queued. Use the eval_run_id to track progress:\n\n"
+        : "Evaluation started/completed:\n\n";
+      alert(prefix + JSON.stringify(result, null, 2));
+    } catch (error) {
+      alert(`Failed to run evaluation: ${error.message}`);
+    }
+  }
+</script>
+{% endblock %}

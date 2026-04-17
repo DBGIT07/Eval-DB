@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Benchmark Comparison</h1>
+
+<section style="margin-bottom: 16px;">
+  <form id="benchmark-form">
+    <div>
+      <label>
+        Dataset Id
+        <input type="text" id="dataset-id" name="dataset_id" placeholder="Dataset UUID" required />
+      </label>
+    </div>
+    <div style="margin-top: 8px;">
+      <label>
+        Variants JSON
+        <textarea id="variants-json" name="variants_json" rows="8" cols="80" required>[
+  { "name": "gpt4_k3", "provider": "openai", "model": "gpt-4", "top_k": 3 },
+  { "name": "gpt4_k5", "provider": "openai", "model": "gpt-4", "top_k": 5 }
+]</textarea>
+      </label>
+    </div>
+    <div style="margin-top: 8px;">
+      <button type="submit">Compare</button>
+    </div>
+  </form>
+</section>
+
+<section style="margin-bottom: 16px;">
+  <h2>Results</h2>
+  <table border="1">
+    <thead>
+      <tr>
+        <th>Variant</th>
+        <th>Faithfulness</th>
+        <th>Relevance</th>
+        <th>Completeness</th>
+        <th>Context Precision</th>
+        <th>Context Recall</th>
+        <th>Groundedness</th>
+        <th>Retrieval Quality</th>
+      </tr>
+    </thead>
+    <tbody id="benchmark-results">
+      <tr>
+        <td colspan="8">No results yet.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+  const benchmarkForm = document.getElementById("benchmark-form");
+  const benchmarkResults = document.getElementById("benchmark-results");
+  const metricKeys = [
+    ["faithfulness", "faithfulness"],
+    ["relevance", "relevance"],
+    ["completeness", "completeness"],
+    ["context_precision", "context_precision"],
+    ["context_recall", "context_recall"],
+    ["groundedness", "groundedness"],
+    ["retrieval_quality", "retrieval_quality"],
+  ];
+
+  function formatScore(value) {
+    const num = Number(value);
+    return Number.isFinite(num) ? num.toFixed(3) : "0.000";
+  }
+
+  function renderResults(data) {
+    const variants = data?.variants || {};
+    const winner = String(data?.winner || "");
+    const rows = Object.entries(variants);
+
+    if (rows.length === 0) {
+      benchmarkResults.innerHTML = '<tr><td colspan="8">No results available.</td></tr>';
+      return;
+    }
+
+    const metricMaxScores = {};
+    for (const [, metricKey] of metricKeys) {
+      metricMaxScores[metricKey] = Math.max(
+        ...rows.map(([, summary]) => Number(summary?.[metricKey] ?? 0))
+      );
+    }
+
+    benchmarkResults.innerHTML = rows.map(([name, summary]) => {
+      const scoreCells = metricKeys.map(([displayName, metricKey]) => {
+        const score = Number(summary?.[metricKey] ?? 0);
+        const formatted = formatScore(score);
+        const isBest = score === metricMaxScores[metricKey] && rows.length > 0;
+        const content = isBest ? `<strong>${formatted}</strong>` : formatted;
+        return `<td>${content}</td>`;
+      }).join("");
+      const isWinner = name === winner;
+      const cellStart = isWinner ? "<strong>" : "";
+      const cellEnd = isWinner ? "</strong>" : "";
+      const variantLabel = isWinner ? `${name} (winner)` : name;
+
+      return `
+        <tr>
+          <td>${cellStart}${variantLabel}${cellEnd}</td>
+          ${scoreCells}
+        </tr>
+      `;
+    }).join("");
+  }
+
+  benchmarkForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const datasetId = String(document.getElementById("dataset-id").value || "").trim();
+    const variantsText = String(document.getElementById("variants-json").value || "").trim();
+
+    if (!datasetId) {
+      alert("Please provide a dataset id.");
+      return;
+    }
+
+    let variants;
+    try {
+      variants = JSON.parse(variantsText);
+    } catch (error) {
+      alert("Variants JSON is invalid.");
+      return;
+    }
+
+    if (!Array.isArray(variants) || variants.length === 0) {
+      alert("Please provide at least one variant.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/benchmark/compare", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          dataset_id: datasetId,
+          variants,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || payload?.detail || "Failed to compare benchmarks.");
+      }
+
+      renderResults(payload.data || payload);
+    } catch (error) {
+      alert(`Failed to compare benchmarks: ${error.message}`);
+    }
+  });
+</script>
+{% endblock %}

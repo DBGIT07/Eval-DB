@@ -1,0 +1,9 @@
+Metrics.py -- Having Prompt logic 
+evaluation.py -- Running the evalution and shwoing result
+faithfulness, hallucination, relevance, completeness
+
+groq - Llama-3.3-70B-Versatile
+
+user: db@dbeval.com | Login@1234
+
+openai model: gpt-4o-mini

@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Traces</h1>
+<section style="margin-bottom: 16px;">
+  <h2>Bulk Actions</h2>
+  <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+    <label>
+      <input type="checkbox" id="select-all-traces" />
+      Select all
+    </label>
+    <select id="existing-dataset-select">
+      <option value="">Loading datasets...</option>
+    </select>
+    <button type="button" id="add-to-existing-btn">Add to Existing</button>
+    <button type="button" id="create-new-dataset-btn">Create New Dataset</button>
+  </div>
+</section>
+<table border="1">
+  <thead>
+    <tr>
+      <th>Select</th>
+      <th>Id</th>
+      <th>Prompt</th>
+      <th>Response</th>
+      <th>Model</th>
+      <th>Created At</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for trace in traces %}
+    <tr>
+      <td>
+        <input type="checkbox" class="trace-select" value="{{ trace.id }}" />
+      </td>
+      <td>{{ trace.id }}</td>
+      <td>{{ trace.prompt }}</td>
+      <td>{{ trace.response }}</td>
+      <td>{{ trace.model }}</td>
+      <td>{{ trace.created_at }}</td>
+      <td>
+        <button type="button" onclick="evaluateTrace('{{ trace.id }}')">Evaluate</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+  const selectAllTraces = document.getElementById("select-all-traces");
+  const existingDatasetSelect = document.getElementById("existing-dataset-select");
+  const addToExistingBtn = document.getElementById("add-to-existing-btn");
+  const createNewDatasetBtn = document.getElementById("create-new-dataset-btn");
+
+  function getSelectedTraceIds() {
+    return Array.from(document.querySelectorAll(".trace-select:checked")).map((checkbox) => checkbox.value);
+  }
+
+  function getDatasetData(payload) {
+    if (payload && typeof payload === "object" && "data" in payload) {
+      return payload.data;
+    }
+    return payload;
+  }
+
+  async function loadDatasets() {
+    try {
+      const response = await fetch("/dataset");
+      const payload = await response.json();
+      const datasets = Array.isArray(getDatasetData(payload)) ? getDatasetData(payload) : [];
+
+      existingDatasetSelect.innerHTML = '<option value="">Choose a dataset</option>';
+      for (const dataset of datasets) {
+        const option = document.createElement("option");
+        option.value = dataset.id;
+        option.textContent = `${dataset.name} (${dataset.task_type})`;
+        existingDatasetSelect.appendChild(option);
+      }
+    } catch (error) {
+      existingDatasetSelect.innerHTML = '<option value="">Failed to load datasets</option>';
+    }
+  }
+
+  async function createDatasetAndAttachTraces(traceIds) {
+    const datasetName = prompt("Enter new dataset name", "Selected traces dataset");
+    if (datasetName === null) {
+      return;
+    }
+
+    const taskType = prompt("Enter task type", "chat");
+    if (taskType === null) {
+      return;
+    }
+
+    const name = datasetName.trim();
+    const task_type = taskType.trim();
+    if (!name || !task_type) {
+      alert("Please provide both a dataset name and task type.");
+      return;
+    }
+
+    try {
+      const createResponse = await fetch("/dataset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name, task_type }),
+      });
+      const createPayload = await createResponse.json();
+      const createdDataset = getDatasetData(createPayload);
+      if (!createResponse.ok) {
+        throw new Error(createPayload?.error || createPayload?.detail || "Failed to create dataset.");
+      }
+
+      const attachResponse = await fetch(`/dataset/${createdDataset.id}/from-traces`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ trace_ids: traceIds }),
+      });
+      const attachPayload = await attachResponse.json();
+      if (!attachResponse.ok) {
+        throw new Error(attachPayload?.error || attachPayload?.detail || "Failed to attach traces.");
+      }
+
+      window.location.reload();
+    } catch (error) {
+      alert(`Failed to create dataset and attach traces: ${error.message}`);
+    }
+  }
+
+  async function attachTracesToExistingDataset(traceIds, datasetId) {
+    if (!datasetId) {
+      alert("Please choose a dataset.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/dataset/${datasetId}/from-traces`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ trace_ids: traceIds }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || payload?.detail || "Failed to attach traces.");
+      }
+      window.location.reload();
+    } catch (error) {
+      alert(`Failed to attach traces: ${error.message}`);
+    }
+  }
+
+  selectAllTraces.addEventListener("change", () => {
+    const checked = selectAllTraces.checked;
+    document.querySelectorAll(".trace-select").forEach((checkbox) => {
+      checkbox.checked = checked;
+    });
+  });
+
+  document.querySelectorAll(".trace-select").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const allCheckboxes = Array.from(document.querySelectorAll(".trace-select"));
+      selectAllTraces.checked = allCheckboxes.length > 0 && allCheckboxes.every((item) => item.checked);
+    });
+  });
+
+  addToExistingBtn.addEventListener("click", () => {
+    const traceIds = getSelectedTraceIds();
+    if (traceIds.length === 0) {
+      alert("Please select at least one trace.");
+      return;
+    }
+    attachTracesToExistingDataset(traceIds, existingDatasetSelect.value);
+  });
+
+  createNewDatasetBtn.addEventListener("click", () => {
+    const traceIds = getSelectedTraceIds();
+    if (traceIds.length === 0) {
+      alert("Please select at least one trace.");
+      return;
+    }
+    createDatasetAndAttachTraces(traceIds);
+  });
+
+  loadDatasets();
+
+  async function evaluateTrace(traceId) {
+    const metricsInput = prompt(
+      "Enter metrics (comma-separated)",
+      "faithfulness,relevance,completeness,hallucination"
+    );
+    if (metricsInput === null) {
+      return;
+    }
+
+    const providerInput = prompt("Enter provider", "openai");
+    if (providerInput === null) {
+      return;
+    }
+
+    const modelInput = prompt("Enter model", "gpt-4");
+    if (modelInput === null) {
+      return;
+    }
+
+    const metrics = metricsInput
+      .split(",")
+      .map((metric) => metric.trim())
+      .filter(Boolean);
+
+    if (metrics.length === 0) {
+      alert("Please enter at least one metric.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/eval/trace/${traceId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          metrics,
+          provider: providerInput.trim(),
+          model: modelInput.trim()
+        })
+      });
+
+      const result = await response.json();
+      alert(JSON.stringify(result, null, 2));
+    } catch (error) {
+      alert(`Failed to evaluate trace: ${error.message}`);
+    }
+  }
+</script>
+{% endblock %}
