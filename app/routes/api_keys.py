@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api-keys", tags=["api-keys"])
 def create_api_key(
     payload: APIKeyCreate,
     db: Session = Depends(get_db),
-    current_user_id: str | None = Depends(get_current_user_id),
+    current_user_id: str = Depends(get_current_user_id),
 ) -> APIKeyCreateResponse:
     require_project_access(db, payload.project_id, current_user_id)
 

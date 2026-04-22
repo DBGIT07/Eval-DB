@@ -50,4 +50,3 @@ def create_project(
             detail="Failed to create project.",
         ) from exc
     return project
-

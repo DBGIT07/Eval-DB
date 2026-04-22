@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -13,7 +13,11 @@ from app.schemas import (
     TraceResponse,
     TraceUpdate,
 )
-from app.security import get_current_user_id, get_project_id_from_api_key, require_project_access
+from app.security import (
+    get_current_user_id,
+    get_project_id_from_api_key,
+    require_project_access,
+)
 
 
 router = APIRouter(tags=["trace"])
@@ -47,9 +51,10 @@ def _require_trace_access(db: Session, trace: Trace, current_user_id: str | None
 @router.post("/trace", response_model=TraceResponse, status_code=status.HTTP_201_CREATED)
 def create_trace(
     payload: TraceCreate,
+    x_api_key: str = Header(alias="X-API-Key"),
     db: Session = Depends(get_db),
-    project_id: str = Depends(get_project_id_from_api_key),
 ) -> Trace:
+    project_id = get_project_id_from_api_key(x_api_key=x_api_key, db=db)
     if payload.project_id is not None and payload.project_id != project_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
