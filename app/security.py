@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from fastapi import Depends, Header, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, Header, HTTPException, Security, status
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user as _auth_get_current_user
+from app.auth import bearer_scheme, get_current_user as _auth_get_current_user
 from app.database import get_db
 from app.models import APIKey, Project, User
 from app.utils.security import hash_api_key
 
 
-oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+api_key_scheme = APIKeyHeader(name="X-API-Key", auto_error=False, description="Project API key used for trace ingestion.")
 
 
 def get_current_user_id(user: User = Depends(_auth_get_current_user)) -> str:
@@ -21,13 +21,13 @@ def get_current_user_id(user: User = Depends(_auth_get_current_user)) -> str:
 
 
 def get_current_user_id_optional(
-    token: str | None = Depends(oauth2_scheme_optional),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> str | None:
-    if token is None or not token.strip():
+    if credentials is None or not credentials.credentials.strip():
         return None
 
-    user = _auth_get_current_user(token=token, db=db)
+    user = _auth_get_current_user(credentials=credentials, db=db)
     return user.id
 
 
@@ -86,7 +86,7 @@ def visible_project_ids(db: Session, user_id: str | None) -> Iterable[str]:
 
 
 def get_project_id_from_api_key(
-    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    x_api_key: str | None = Security(api_key_scheme),
     db: Session = Depends(get_db),
 ) -> str:
     if x_api_key is None or not x_api_key.strip():
@@ -112,7 +112,7 @@ def get_project_id_from_api_key(
 
 
 def get_project_id_from_api_key_optional(
-    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    x_api_key: str | None = Security(api_key_scheme),
     db: Session = Depends(get_db),
 ) -> str | None:
     if x_api_key is None or not x_api_key.strip():

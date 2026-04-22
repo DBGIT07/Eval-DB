@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy import select
@@ -22,7 +22,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "
 # Use a Passlib-managed hash that does not depend on the bcrypt backend,
 # which avoids compatibility problems with bcrypt 5.x on this Python build.
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
@@ -82,9 +82,17 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
 
 
 def get_current_user_id(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> str:
+    if credentials is None or not credentials.credentials.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = credentials.credentials.strip()
     payload = decode_access_token(token)
     subject = str(payload["sub"]).strip()
     user = db.scalar(select(User).where(User.id == subject))
@@ -98,9 +106,17 @@ def get_current_user_id(
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
+    if credentials is None or not credentials.credentials.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = credentials.credentials.strip()
     payload = decode_access_token(token)
     subject = str(payload["sub"]).strip()
     user = db.scalar(select(User).where(User.id == subject))

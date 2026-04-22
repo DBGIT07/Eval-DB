@@ -6,7 +6,7 @@ This project ships with Docker support for the FastAPI app, the React UI, and Po
 
 ### Quick Start
 
-1. Copy `.env.example` to `.env` with `setup.bat` on Windows or `make init-env` if you use `make`.
+1. Copy `.env.example` to `.env`
 1. Fill in any API keys or local overrides you want to use.
 1. Start the stack:
 
@@ -125,6 +125,12 @@ Use the returned token as:
 ```bash
 Authorization: Bearer <access_token>
 ```
+
+In Swagger UI, use the `HTTPBearer` authorization button to paste the raw JWT
+access token directly for user-authenticated endpoints. `POST /auth/login`
+still expects JSON `{"email": "...", "password": "..."}`.
+
+The `X-API-Key` header is only for trace ingestion on `POST /trace`.
 
 ### Ports
 
